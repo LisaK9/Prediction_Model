@@ -49,9 +49,9 @@ models = {
 
 # Feature-Selektionstechniken
 feature_selectors = {
-    'RFE': RFE(estimator=SVR(kernel='linear'), n_features_to_select=10),
+    'RFE': RFE(estimator=SVR(kernel='linear'), n_features_to_select=6),
     'Lasso': Lasso(),
-    'Univariate': SelectKBest(score_func=f_regression, k=10),
+    'Univariate': SelectKBest(score_func=f_regression, k=6),
     'Random Forest': RandomForestRegressor(random_state=42)
 }
 
@@ -132,3 +132,106 @@ for model_name in predictions_baseline.keys():
     plt.ylabel('Ersatzfahrer')
     plt.legend()
     plt.show()
+
+# Modelltraining, Feature Selection, Hyperparameter-Tuning
+results = {}
+residuals= {}
+predictions_dict={}
+best_estimators = {}
+best_scalers = {}
+best_selectors = {}
+
+best_scores = {}
+best_models = {}
+best_params = {}
+
+for fs_name, selector in feature_selectors.items(): #Feature-Selection
+    selector.fit(X_train_scaled, y_train)
+    if fs_name == 'Lasso':
+        # Bei Lasso wird die Feature-Auswahl direkt auf Basis der Koeffizienten gemacht
+        selected_features = np.where(selector.coef_ != 0)[0]
+    elif fs_name == 'Random Forest':
+        # Bei Random Forest ist die Feature-Auswahl basierend auf den Feature-Importances
+        importances = selector.feature_importances_
+        indices = np.argsort(importances)[::-1]
+        selected_features = indices[:6]  # Wähle die Top 6 Features
+    else:
+        # Bei anderen Selektoren wie RFE und SelectKBest
+        selected_features = selector.get_support(indices=True)
+
+    # Daten mit ausgewählten Features erstellen
+    X_train_selected = X_train_scaled[:, selected_features]
+    X_test_selected = X_test_scaled[:, selected_features]
+
+    for model_name, model in models.items(): #Modelle trainieren und Hyperparameter-Tuning
+        key = f"{model_name} with {fs_name}"
+        if model_name in param_grid: #Hyperparameter-Tuning
+            grid_search = GridSearchCV(estimator=model, param_grid=param_grid[model_name],
+                                       scoring='neg_mean_squared_error', cv=5, verbose=1)
+            grid_search.fit(X_train_selected, y_train)
+            best_model = grid_search.best_estimator_
+            best_params[key] = grid_search.best_params_
+            print(f"\nBeste Hyperparameter für {key}: {grid_search.best_params_}")
+        else:
+            best_model = model
+            best_model.fit(X_train_selected, y_train)
+            best_params[key] = "Standard-Hyperparameter"
+
+        prediction, mae, mse, rmse, r2, residuals, y_pred = evaluate_model(model, X_train_selected, X_test_selected,
+                                                                           y_train, y_test)
+        key = f"{model_name} with {fs_name}"
+        results[key] = {
+            'MAE': mae,
+            'MSE': mse,
+            'RMSE': rmse,
+            'R2': r2
+        }
+        best_estimators[key] = best_model
+        residuals[key] = residuals
+        predictions_dict[key] = y_pred
+        best_scalers[key] = scaler
+        best_selectors[key] = selector
+
+# Ergebnisse anzeigen
+results_df1 = pd.DataFrame(results).T
+print("Ergebnisse der Modelle:\n", results_df1)
+
+
+# Hinzufügen der Vorhersagen zu result_df
+for model_name, predictions in predictions_dict.items():
+    result_df[model_name + '_pred'] = predictions
+print(result_df)
+
+# Visualisierung der Vorhersagen im Vergleich zu den tatsächlichen Werten
+plt.figure(figsize=(15, 10))
+for model_name in predictions_dict.keys():
+    plt.plot(result_df.index, result_df[target], label='Actual', color='blue')
+    plt.plot(result_df.index, result_df[model_name + '_pred'], label=f'{model_name} Predicted')
+    plt.title(f'Actual vs Predicted for {model_name}')
+    plt.xlabel('Test Data Index')
+    plt.ylabel('Ersatzfahrer')
+    plt.legend()
+    plt.show()
+
+import pickle
+
+# Auswahl des besten Modells basierend auf MAE
+best_model_key = min(results, key=lambda k: results[k]['MAE'])
+print(f"Best model based on MAE: {best_model_key} with MAE: {results[best_model_key]['MAE']:.4f}")
+
+# Überprüfen, ob das Modell trainiert wurde
+if best_model_key not in best_estimators:
+    # Trainiere das Modell, falls es noch nicht trainiert wurde
+    best_selector = best_selectors[best_model_key]
+    selected_features = best_selector.transform(X_train_scaled)
+
+    best_model = models[best_model_key.split(" with ")[0]]
+    best_model.fit(selected_features, y_train)
+else:
+    best_model = best_estimators[best_model_key]
+
+# Modell als .pkl Datei speichern
+model_filename = f"{best_model_key.replace(' ', '_').replace(':', '')}_best_model.pkl"
+with open(model_filename, 'wb') as file:
+    pickle.dump(best_model, file)
+    print(f"Best model saved as {model_filename}")
