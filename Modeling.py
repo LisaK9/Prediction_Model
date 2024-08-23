@@ -20,9 +20,41 @@ import matplotlib.pyplot as plt
 data = pd.read_csv('sickness_modeling.csv')
 print(data.head(5))
 
+# Lag-Features erstellen
+def create_lag_features(data, feature, lags):
+    for lag in lags:
+        data[f'{feature}_lag_{lag}'] = data[feature].shift(lag)
+    return data
+
+lags = [1, 7, 30, 365]  # 1 Tag, 7 Tage, 30 Tage, 1 Jahr
+features = ['calls', 'n_duty', 'n_sick']
+
+for feature in features:
+    data = create_lag_features(data, feature, lags)
+
+# Rolling Averages erstellen
+def create_rolling_features(data, feature, windows):
+    for window in windows:
+        data[f'{feature}_rolling_{window}'] = data[feature].rolling(window=window).mean()
+    return data
+
+windows = [7, 30]  # 7 Tage, 30 Tage
+for feature in features:
+    data = create_rolling_features(data, feature, windows)
+
+# Fehlende Werte entfernen (entstehen durch Lag-Features)
+#data.dropna(inplace=True)
+#print("New DF:", data)
+
 #Features und Zielvariable festlegen
-features = ['n_sick','calls','n_duty','month','day_of_week','season', 'week', 'holiday', 'year']
+features = ['n_duty','n_sick','calls','month','day_of_week','season', 'week', 'holiday', 'year']
 target = 'sby_need'
+
+#features = ['n_duty','n_sick','calls','month','day_of_week','season', 'week', 'holiday', 'year','n_sick_lag_1',
+#            'n_sick_lag_7', 'n_sick_lag_30', 'n_sick_lag_365', 'calls_lag_1', 'calls_lag_7', 'calls_lag_30',
+#            'calls_lag_365','n_sick_rolling_7', 'n_sick_rolling_30', 'calls_rolling_7', 'calls_rolling_30','n_duty_lag_1',
+#            'n_duty_lag_7', 'n_duty_lag_30', 'n_duty_lag_365','n_duty_rolling_7', 'n_duty_rolling_30']
+#target = 'sby_need'
 
 #Daten in Train- und Testdaten aufteilen
 X = data[features]
@@ -91,8 +123,8 @@ def evaluate_model(model, X_train, X_test, y_train, y_test):
 
 # Features skalieren
 scaler = StandardScaler()
-X_train_scaled = scaler.fit_transform(X_train)
-X_test_scaled = scaler.transform(X_test)
+#X_train_scaled = scaler.fit_transform(X_train)
+#X_test_scaled = scaler.transform(X_test)
 
 results_baseline = {}
 predictions_baseline = {}
@@ -101,7 +133,7 @@ residuals_baseline = {}
 
 for model_name, model in models.items():
     if model_name == 'Linear Regression':
-        prediction, mae, mse, rmse, r2, residuals, y_pred = evaluate_model(model, X_train_scaled, X_test_scaled, y_train, y_test)
+        prediction, mae, mse, rmse, r2, residuals, y_pred = evaluate_model(model, X_train, X_test, y_train, y_test)
         results_baseline[model_name] = {
             'MAE': mae,
             'MSE': mse,
@@ -146,38 +178,50 @@ best_models = {}
 best_params = {}
 
 for fs_name, selector in feature_selectors.items(): #Feature-Selection
-    selector.fit(X_train_scaled, y_train)
+    selector.fit(X_train, y_train)
     if fs_name == 'Lasso':
         # Bei Lasso wird die Feature-Auswahl direkt auf Basis der Koeffizienten gemacht
-        selected_features = np.where(selector.coef_ != 0)[0]
+        selected_feature_indices = np.where(selector.coef_ != 0)[0]
     elif fs_name == 'Random Forest':
         # Bei Random Forest ist die Feature-Auswahl basierend auf den Feature-Importances
         importances = selector.feature_importances_
         indices = np.argsort(importances)[::-1]
-        selected_features = indices[:6]  # Wähle die Top 6 Features
+        selected_feature_indices = indices[:6
+                            ]  # Wähle die Top 6 Features
     else:
         # Bei anderen Selektoren wie RFE und SelectKBest
-        selected_features = selector.get_support(indices=True)
+        selected_feature_indices = selector.get_support(indices=True)
+
+    selected_features = [features[i] for i in selected_feature_indices]
 
     # Daten mit ausgewählten Features erstellen
-    X_train_selected = X_train_scaled[:, selected_features]
-    X_test_selected = X_test_scaled[:, selected_features]
+    X_train_selected = X_train[selected_features]
+    X_test_selected = X_test[selected_features]
+
+    # Features skalieren
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train_selected)
+    X_test_scaled = scaler.transform(X_test_selected)
+
+    # Daten mit ausgewählten Features erstellen
+    #X_train_selected = X_train_scaled[:, selected_features]
+    #X_test_selected = X_test_scaled[:, selected_features]
 
     for model_name, model in models.items(): #Modelle trainieren und Hyperparameter-Tuning
         key = f"{model_name} with {fs_name}"
         if model_name in param_grid: #Hyperparameter-Tuning
             grid_search = GridSearchCV(estimator=model, param_grid=param_grid[model_name],
                                        scoring='neg_mean_squared_error', cv=5, verbose=1)
-            grid_search.fit(X_train_selected, y_train)
+            grid_search.fit(X_train_scaled, y_train)
             best_model = grid_search.best_estimator_
             best_params[key] = grid_search.best_params_
             print(f"\nBeste Hyperparameter für {key}: {grid_search.best_params_}")
         else:
             best_model = model
-            best_model.fit(X_train_selected, y_train)
+            best_model.fit(X_train_scaled, y_train)
             best_params[key] = "Standard-Hyperparameter"
 
-        prediction, mae, mse, rmse, r2, residuals, y_pred = evaluate_model(model, X_train_selected, X_test_selected,
+        prediction, mae, mse, rmse, r2, residuals, y_pred = evaluate_model(model, X_train_scaled, X_test_scaled,
                                                                            y_train, y_test)
         key = f"{model_name} with {fs_name}"
         results[key] = {
@@ -195,7 +239,7 @@ for fs_name, selector in feature_selectors.items(): #Feature-Selection
 # Ergebnisse anzeigen
 results_df1 = pd.DataFrame(results).T
 print("Ergebnisse der Modelle:\n", results_df1)
-
+results_df1.to_csv('model_evaluation.csv')
 
 # Hinzufügen der Vorhersagen zu result_df
 for model_name, predictions in predictions_dict.items():
@@ -216,22 +260,57 @@ for model_name in predictions_dict.keys():
 import pickle
 
 # Auswahl des besten Modells basierend auf MAE
-best_model_key = min(results, key=lambda k: results[k]['MAE'])
-print(f"Best model based on MAE: {best_model_key} with MAE: {results[best_model_key]['MAE']:.4f}")
+best_model_key = min(results, key=lambda k: results[k]['MSE'])
+print(f"Best model based on MSE: {best_model_key} with MSE: {results[best_model_key]['MSE']:.4f}")
 
 # Überprüfen, ob das Modell trainiert wurde
-if best_model_key not in best_estimators:
-    # Trainiere das Modell, falls es noch nicht trainiert wurde
-    best_selector = best_selectors[best_model_key]
-    selected_features = best_selector.transform(X_train_scaled)
+#if best_model_key not in best_estimators:
+#    # Trainiere das Modell, falls es noch nicht trainiert wurde
+#    best_selector = best_selectors[best_model_key]
+#    selected_features = best_selector.transform(X_train_scaled)
 
-    best_model = models[best_model_key.split(" with ")[0]]
-    best_model.fit(selected_features, y_train)
+#    best_model = models[best_model_key.split(" with ")[0]]
+#    best_model.fit(selected_features, y_train)
+#else:
+#    best_model = best_estimators[best_model_key]
+
+
+# Extrahieren der ausgewählten Features
+best_selector = best_selectors[best_model_key]
+
+if hasattr(best_selector, 'get_support'):  # Prüfen, ob der Selektor die Methode 'get_support' hat
+    selected_feature_indices = best_selector.get_support(indices=True)
+    selected_feature_names = np.array(features)[selected_feature_indices]
+elif isinstance(best_selector, RandomForestRegressor):  # Wenn der Selektor ein RandomForestRegressor ist
+    # Ermitteln der wichtigsten Features basierend auf Feature-Importances
+    importances = best_selector.feature_importances_
+    indices = np.argsort(importances)[::-1]  # Absteigend sortieren
+    selected_feature_indices = indices[:6]  # Die Top 6 Features auswählen (je nach Modell)
+    selected_feature_names = np.array(features)[selected_feature_indices]
 else:
-    best_model = best_estimators[best_model_key]
+    raise ValueError(f"Unsupported selector type: {type(best_selector)}")
+
+# Speichern des Modells, des Scalers und der Features als Dictionary
+model_data = {
+    'model': best_model,
+    'scaler': best_scalers[best_model_key],
+    'features': selected_feature_names.tolist()  # In eine Liste umwandeln, um sie später leicht zu laden
+}
 
 # Modell als .pkl Datei speichern
-model_filename = f"{best_model_key.replace(' ', '_').replace(':', '')}_best_model.pkl"
+model_filename = "best_model.pkl"
 with open(model_filename, 'wb') as file:
     pickle.dump(best_model, file)
     print(f"Best model saved as {model_filename}")
+
+# Scaler speichern
+scaler_filename = "scaler.pkl"
+with open(scaler_filename, 'wb') as file:
+    pickle.dump(best_scalers[best_model_key], file)
+    print(f"Scaler saved as {scaler_filename}")
+
+# Modell, Scaler und Features in einer Datei speichern
+model_filename = "best_model_data.pkl"
+with open(model_filename, 'wb') as file:
+    pickle.dump(model_data, file)
+    print(f"Best model, scaler, and features saved as {model_filename}")
