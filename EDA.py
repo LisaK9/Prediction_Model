@@ -42,40 +42,32 @@ de_holidays = holidays.Germany()
 #Binäres Feature, ob Feiertag oder nicht
 data['holiday'] = data['date'].apply(lambda x: 1 if x in de_holidays else 0)
 
-# Line Plot: Anzahl der kranken Einsatzfahrenden im Zeitverlauf
-plt.figure(figsize=(12, 6))
-plt.plot(data['date'], data['n_sick'], label='Kranke Einsatzfahrer')
-plt.xlabel('Datum')
-plt.ylabel('Anzahl der kranken Einsatzfahrenden')
-plt.title('Anzahl der kranken Einsatzfahrenden im Zeitverlauf')
-plt.legend()
-plt.show()
 
-# Line Plot: Anzahl der Notrufe im Zeitverlauf
-plt.figure(figsize=(12, 6))
-plt.plot(data['date'], data['calls'], label='Notrufe', color='orange')
-plt.xlabel('Datum')
-plt.ylabel('Anzahl der Notrufe')
-plt.title('Anzahl der Notrufe im Zeitverlauf')
-plt.legend()
-plt.show()
+# Plotten der Zeitreihen für die relevanten Variablen
+fig, axs = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
 
-# Line Plot: Anzahl der benötigten Ersatzfahrer im Zeitverlauf
-plt.figure(figsize=(12, 6))
-plt.plot(data['date'], data['sby_need'], label='benötigte Ersatzfahrer', color='orange')
-plt.xlabel('Datum')
-plt.ylabel('Anzahl der benötigten Ersatzfahrer')
-plt.title('Anzahl der benötigten Ersatzfahrer im Zeitverlauf')
-plt.legend()
-plt.show()
+# Plot für n_sick
+axs[0].plot(data['date'], data['n_sick'], color='blue')
+axs[0].set_title('n_sick (Anzahl der Krankenmeldungen)')
+axs[0].set_ylabel('n_sick')
 
-# Line Plot: Anzahl der Einsatzfahrer im Dienst im Zeitverlauf
-plt.figure(figsize=(12, 6))
-plt.plot(data['date'], data['n_duty'], label='Einsatzfahrer im Dienst', color='orange')
-plt.xlabel('Datum')
-plt.ylabel('Anzahl der Einsatzfahrer im Dienst')
-plt.title('Anzahl der Einsatzfahrer im Dienst im Zeitverlauf')
-plt.legend()
+# Plot für calls
+axs[1].plot(data['date'], data['calls'], color='orange')
+axs[1].set_title('calls (Anzahl der Anrufe)')
+axs[1].set_ylabel('calls')
+
+# Plot für n_duty
+axs[2].plot(data['date'], data['n_duty'], color='green')
+axs[2].set_title('n_duty (Anzahl der Mitarbeiter im Dienst)')
+axs[2].set_ylabel('n_duty')
+
+# Plot für sby_need
+axs[3].plot(data['date'], data['sby_need'], color='red')
+axs[3].set_title('sby_need (Zielvariable)')
+axs[3].set_ylabel('sby_need')
+axs[3].set_xlabel('Datum')
+
+plt.tight_layout()
 plt.show()
 
 # Korrelationen zwischen den numerischen Variablen
