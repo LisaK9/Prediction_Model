@@ -189,7 +189,7 @@ for model_name, combo in model_best_combinations.items():
     plt.legend()
     plt.grid()
     # Lernkurven speichern
-    filename = f"learning_curve_{model_name}_{fs_name}_{n_features}_features.png"
+    filename = f"learning_curve_{model_name}_{n_features}_features.png"
     modeling_functions.save_plot(filename)
     plt.show()
 
@@ -197,7 +197,7 @@ for model_name, combo in model_best_combinations.items():
 plt.figure(figsize=(15, 10))
 for model_name in predictions_dict.keys():
     plt.plot(result_df.index, result_df['sby_need'], label='Actual', color='blue')
-    plt.plot(result_df.index, result_df[model_name + '_pred'], label=f'{model_name} Predicted')
+    plt.plot(result_df.index, result_df[model_name + '_pred'], label='Predicted')
     plt.title(f'Actual vs Predicted for {model_name}')
     plt.xlabel('Test Data Index')
     plt.ylabel('Anzahl benötigte Bereitschaftsfahrer (sby_need)')
@@ -209,7 +209,7 @@ for model_name in predictions_dict.keys():
 #Visualisierung der Residuen von jedem Modell
 plt.figure(figsize=(15, 10))
 for model_name, residuals in residuals_dict.items():
-    plt.scatter(result_df.index, residuals, label=f'{model_name} Residuals', alpha=0.5)
+    plt.scatter(result_df.index, residuals, label='Residuals', alpha=0.5)
     plt.axhline(0, color='black', linestyle='--', linewidth=1)
     plt.title(f'Residuals Plot for {model_name}')
     plt.xlabel('Test Data Index')
@@ -223,6 +223,7 @@ for model_name, residuals in residuals_dict.items():
 #Visualisierung des MSE von jedem Modell mit Anzeige der Werte
 mse_values = [results[key]['MSE'] for key in results]
 model_names = list(results.keys())
+model_names = cleaned_model_name = model_names.split("with")[0].strip()
 
 plt.figure(figsize=(12, 6))
 bars = plt.bar(model_names, mse_values, color='skyblue')  # Vertikale Balken
