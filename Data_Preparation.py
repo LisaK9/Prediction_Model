@@ -12,6 +12,9 @@ sickness_data['date'] = pd.to_datetime(sickness_data['date'])
 
 #Indexspalte löschen
 sickness_data = sickness_data.drop(columns=["Unnamed: 0"])
+
+sickness_data['activation_rate'] = (sickness_data['sby_need']/sickness_data['n_sby'])*100
+
 sickness_data = sickness_data.drop(columns=["n_sby"])
 
 # zusätzliche Features
